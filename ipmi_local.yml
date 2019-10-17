@@ -1,0 +1,11 @@
+# Configuration file for ipmitool_exporter
+
+# This is an example config for scraping the local host.
+# In most cases, this should work without using a config file at all.
+modules:
+        default:
+                # Available collectors are bmc, ipmi, and dcmi
+                collectors:
+                - fru
+                - sensor
+                - fwum

@@ -1,0 +1,35 @@
+# Configuration file for ipmitool_exporter
+
+# This is an example config for scraping remote hosts via IPMI.
+# Information required to access remote IPMI interfaces can be supplied in the
+# 'modules' section. A scrape can request the usage of a given config by
+# setting the `module` URL parameter.
+
+modules:
+        default:
+                # These settings are used if no module is specified, the
+                # specified module doesn't exist, or of course if
+                # module=default is specified.
+                user: "default_user"
+                pass: "default_pass"
+                # The below settings correspond to privilege-level and
+                # session-timeout respectively
+                privilege: "administrator"
+                # The session timeout is in seconds. Note that a scrape can take up
+                # to (session-timeout * #-of-collectors) seconds, so set the scrape
+                # timeout in Prometheus accordingly.
+                timeout: 5
+                # Available collectors are sensor, fru, and fwum
+                # If not specified, all three are used
+                collectors:
+                - fru
+                - sensor
+                - fwum
+        example:
+                user: "example_user"
+                pass: "example_pass"
+                privilege: "administrator"
+                timeout: 5
+                collectors:
+                - fru
+                - sensor
