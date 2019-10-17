@@ -33,7 +33,7 @@ Supported parameters include:
 
  - `web.listen-address`: the address/port to listen on (default: `":9104"`)
  - `config.file`: path to the configuration file (default: none)
- - `ipmitool.path`: path to the FreeIPMI executables (default: rely on `$PATH`)
+ - `ipmitool.path`: path to the ipmitool executables (default: rely on `$PATH`)
 
 For syntax and a complete list of available parameters, run:
 
@@ -68,10 +68,6 @@ The config file supports the notion of "modules", so that different
 configurations can be re-used for groups of targets. See the section below on
 how to set the module parameter in Prometheus. The special module "default" is
 used in case the scrape does not request a specific module.
-
-The configuration file also supports a blacklist of sensors, useful in case of
-OEM-specific sensors that FreeIPMI cannot deal with properly or otherwise
-misbehaving sensors. This applies to both local and remote metrics.
 
 There are two commented example configuration files, see `ipmi_local.yml` for
 scraping local host metrics and `ipmi_remote.yml` for scraping remote IPMI
