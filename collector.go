@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"math"
 	"os/exec"
 	"regexp"
@@ -243,18 +242,10 @@ func ipmitoolOutput(target ipmiTarget, command string) (string, error) {
 		cmdCommand = append(cmdCommand, "")
 	}
 
-	timeout := 2 * time.Second
-
-	if target.config.Timeout != 0 {
-		timeout = time.Duration(target.config.Timeout) * time.Second
-	}
-
 	cmdConfig = append(cmdConfig, "-H", target.host)
 	cmdConfig = append(cmdConfig, cmdCommand...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "ipmitool", cmdConfig...)
+	cmd := exec.Command("ipmitool", cmdConfig...)
 	var outBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &outBuf
