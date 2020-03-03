@@ -21,10 +21,25 @@ const (
 )
 
 var (
-	ipmiCurrentPowerRegex = regexp.MustCompile(`^Chassis\s*Power\s*is\s*(?P<value>on|off*)`)
+	fruBoardDateRegex		= regexp.MustCompile(`\sBoard\sMfg\sDate\s*:\s*(?P<value>.*)`)
+	ipmiCurrentPowerRegex	= regexp.MustCompile(`^Chassis\s*Power\s*is\s*(?P<value>on|off*)`)
+	ipSourceRegex			= regexp.MustCompile(`^IP\sAddress\sSource\s*:\s*(?P<value>.*)`)
+	macAddressRegex			= regexp.MustCompile(`^MAC\sAddress\s*:\s*(?P<value>.*)`)
+	defaultGatewayRegex		= regexp.MustCompile(`^Default\sGateway\sIP\s*:\s*(?P<value>.*)`)
+	vlanIDRegex				= regexp.MustCompile(`^802.1q\sVLAN\sID\s*:\s*(?P<value>.*)`)
+	vlanPriorityRegex		= regexp.MustCompile(`^802.1q\sVLAN\sPriority\s*:\s*(?P<value>.*)`)
+	subnetMaskRegex			= regexp.MustCompile(`^Subnet\sMask\s*:\s*(?P<value>.*)`)
+	firmwareRevRegex		= regexp.MustCompile(`^Firmware\sRevision\s*:\s*(?P<value>.*)`)
+	ipmiVersionRegex		= regexp.MustCompile(`^IPMI\sVersion\s*:\s*(?P<value>.*)`)
+	manufacturerRegex		= regexp.MustCompile(`^Manufacturer\sName\s*:\s*(?P<value>.*)`)
 )
 
 type fruData struct {
+	Name  string
+	Value string
+}
+
+type lanData struct {
 	Name  string
 	Value string
 }
@@ -39,6 +54,11 @@ type sensorData struct {
 type fwumData struct {
 	Name  string
 	Value float64
+}
+
+type bmcData struct {
+	Name  string
+	Value string
 }
 
 type collector struct {
@@ -83,21 +103,21 @@ var (
 
 	chassisPowerDeviceDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "chassis_power_dev", "value"),
-		"Chassis Power Supply device status.",
+		"Chassis Power Supply device status (0=missing, 1=present).",
 		[]string{"name"},
 		nil,
 	)
 
 	chassisPowerDeviceStateDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "chassis_power_dev", "state"),
-		"Reported state of a Chassis Power State (0=on, 1=off).",
+		"Reported state of a Power Supply (0=missing, 1=present).",
 		[]string{"name"},
 		nil,
 	)
 
 	chassisPowerStateDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "chassis_power", "state"),
-		"Reported state of a Chassis Power State (0=on, 1=off).",
+		prometheus.BuildFQName(namespace, "power", "state"),
+		"Reported Chassis Power State (0=off, 1=on).",
 		[]string{"name"},
 		nil,
 	)
@@ -166,7 +186,7 @@ var (
 	)
 
 	powerStateDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "power", "state"),
+		prometheus.BuildFQName(namespace, "sensor_power", "state"),
 		"Reported state of a power sensor (1=ok, 0=critical).",
 		[]string{"name"},
 		nil,
@@ -179,16 +199,30 @@ var (
 		nil,
 	)
 
+	fwumInfo = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "fwum", "info"),
+		"Constant metric with value '1' providing details about the BMC.",
+		[]string{"firmware_revision", "manufacturer_id"},
+		nil,
+	)
+
 	bmcInfo = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "bmc", "info"),
 		"Constant metric with value '1' providing details about the BMC.",
-		[]string{"firmware_revision", "manufacturer_id"},
+		[]string{"name", "value"},
 		nil,
 	)
 
 	fruInfo = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "fru", "info"),
 		"Constant metric with value '1' providing details from FRU.",
+		[]string{"name", "value"},
+		nil,
+	)
+
+	lanInfo = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "lan", "info"),
+		"Constant metric with value '1' providing details from LAN.",
 		[]string{"name", "value"},
 		nil,
 	)
@@ -237,6 +271,10 @@ func ipmitoolOutput(target ipmiTarget, command string) (string, error) {
 		cmdCommand = append(cmdCommand, "power", "status")
 	case "fwum":
 		cmdCommand = append(cmdCommand, "fwum", "info")
+	case "bmc":
+		cmdCommand = append(cmdCommand, "bmc", "info")
+	case "lan":
+		cmdCommand = append(cmdCommand, "lan", "print")
 	default:
 		log.Errorf("Unknown ipmitool command: '%s'\n", command)
 		cmdCommand = append(cmdCommand, "")
@@ -262,7 +300,8 @@ func ipmitoolOutput(target ipmiTarget, command string) (string, error) {
 				}
 			}
 		} else {
-			log.Fatal(err)
+			log.Errorf("Error while calling %s for %s: %s", command, targetName(target.host), cmd)
+			//log.Fatal(err)
 		}
 	}
 	return outBuf.String(), err
@@ -328,6 +367,61 @@ func splitFwumOutput(impitoolOutput string) ([]fwumData, error) {
 	return result, err
 }
 
+func splitBmcOutput(impitoolOutput string) ([]bmcData, error) {
+	var result []bmcData
+
+	scanner := bufio.NewScanner(strings.NewReader(impitoolOutput))
+
+	var err error
+
+	for scanner.Scan() {
+		var data bmcData
+		line := scanner.Text()
+		if len(line) > 0 {
+			firmwareRev := firmwareRevRegex.FindStringSubmatch(line)
+			if firmwareRev != nil {
+				for i, name := range firmwareRevRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "FirmwareRevision"
+					data.Value = firmwareRev[i]
+					result = append(result, data)
+					break
+				}
+				continue
+			}
+			ipmiVersion := ipmiVersionRegex.FindStringSubmatch(line)
+			if ipmiVersion != nil {
+				for i, name := range ipmiVersionRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "IPMIVersion"
+					data.Value = ipmiVersion[i]
+					result = append(result, data)
+					break
+				}
+				continue
+			}
+			manufacturer := manufacturerRegex.FindStringSubmatch(line)
+			if manufacturer != nil {
+				for i, name := range manufacturerRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "Manufacturer"
+					data.Value = manufacturer[i]
+					result = append(result, data)
+					break
+				}
+				break
+			}
+		}
+	}
+	return result, err
+}
+
 func splitFruOutput(impitoolOutput string) ([]fruData, error) {
 	var result []fruData
 
@@ -338,11 +432,117 @@ func splitFruOutput(impitoolOutput string) ([]fruData, error) {
 		var data fruData
 		line := scanner.Text()
 		if len(line) > 0 {
+			boardDate := fruBoardDateRegex.FindStringSubmatch(line)
+			if boardDate != nil {
+				for i, name := range fruBoardDateRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "BoardMfgDate"
+					data.Value = boardDate[i]
+					result = append(result, data)
+					break
+				}
+				continue
+			}
 			trimmedL := strings.ReplaceAll(line, " ", "")
 			splittedL := strings.Split(trimmedL, ":")
 			data.Name = splittedL[0]
 			data.Value = splittedL[1]
 			result = append(result, data)
+		}
+	}
+	return result, err
+}
+
+func splitLANOutput(impitoolOutput string) ([]lanData, error) {
+	var result []lanData
+
+	scanner := bufio.NewScanner(strings.NewReader(impitoolOutput))
+
+	var err error
+	for scanner.Scan() {
+		var data lanData
+		line := scanner.Text()
+		if len(line) > 0 {
+			ipSource := ipSourceRegex.FindStringSubmatch(line)
+			if ipSource != nil {
+				for i, name := range ipSourceRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "IPSource"
+					data.Value = strings.ReplaceAll(ipSource[i], " ", "")
+					result = append(result, data)
+					break
+				}
+				continue
+			}
+			subnetMask := subnetMaskRegex.FindStringSubmatch(line)
+			if subnetMask != nil {
+				for i, name := range subnetMaskRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "SubnetMask"
+					data.Value = subnetMask[i]
+					result = append(result, data)
+					break
+				}
+				continue
+			}
+			macMatch := macAddressRegex.FindStringSubmatch(line)
+			if macMatch != nil {
+				for i, name := range macAddressRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "MACAddress"
+					data.Value = macMatch[i]
+					result = append(result, data)
+					break
+				}
+				continue
+			}
+			defGateway := defaultGatewayRegex.FindStringSubmatch(line)
+			if defGateway != nil {
+				for i, name := range defaultGatewayRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "DefaultGateway"
+					data.Value = defGateway[i]
+					result = append(result, data)
+					break
+				}
+				continue
+			}
+			vlanID := vlanIDRegex.FindStringSubmatch(line)
+			if vlanID != nil {
+				for i, name := range vlanIDRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "VLANID"
+					data.Value = vlanID[i]
+					result = append(result, data)
+					break
+				}
+				continue
+			}
+			vlanPriority := vlanPriorityRegex.FindStringSubmatch(line)
+			if vlanPriority != nil {
+				for i, name := range vlanPriorityRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "VLANPriority"
+					data.Value = vlanPriority[i]
+					result = append(result, data)
+					break
+				}
+				break
+			}
 		}
 	}
 	return result, err
@@ -358,11 +558,11 @@ func getChassisPowerState(ipmitoolOutput string) (int, error) {
 		if len(line) > 0 {
 			value := ipmiCurrentPowerRegex.FindStringSubmatch(line)[1]
 			if value == "on" {
-				return 0, err
+				return 1, err
 			}
 		}
 	}
-	return 1, err
+	return 0, err
 }
 
 // Describe implements Prometheus.Collector.
@@ -460,10 +660,16 @@ func collectSensorMonitoring(ch chan<- prometheus.Metric, target ipmiTarget) (in
 		case "discrete":
 			if res, err := regexp.MatchString("ChassisIntru", data.Name); res {
 				if err != nil {
+					// TODO log error
+					collectTypedSensor(ch, chassisIntrusionDesc, chassisIntrusionStateDesc, state, data)
+				} else {
 					collectTypedSensor(ch, chassisIntrusionDesc, chassisIntrusionStateDesc, state, data)
 				}
 			} else if res, err := regexp.MatchString(`PS\dStatus*`, data.Name); res {
 				if err != nil {
+					// TODO log error
+					collectTypedSensor(ch, chassisPowerDeviceDesc, chassisPowerDeviceStateDesc, state, data)
+				} else {
 					collectTypedSensor(ch, chassisPowerDeviceDesc, chassisPowerDeviceStateDesc, state, data)
 				}
 			}
@@ -474,7 +680,7 @@ func collectSensorMonitoring(ch chan<- prometheus.Metric, target ipmiTarget) (in
 	return 1, nil
 }
 
-func collectFRUMonitoring(ch chan<- prometheus.Metric, target ipmiTarget) (int, error) {
+func collectFRUInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, error) {
 	output, err := ipmitoolOutput(target, "fru")
 	if err != nil {
 		log.Debugf("Failed to collect ipmitool fru data from %s: %s", targetName(target.host), err)
@@ -497,7 +703,53 @@ func collectFRUMonitoring(ch chan<- prometheus.Metric, target ipmiTarget) (int, 
 	return 1, nil
 }
 
+func collectLANInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, error) {
+	output, err := ipmitoolOutput(target, "lan")
+	if err != nil {
+		log.Debugf("Failed to collect ipmitool lan data from %s: %s", targetName(target.host), err)
+		return 0, err
+	}
+	results, err := splitLANOutput(output)
+	if err != nil {
+		log.Errorf("Failed to parse ipmitool lan data from %s: %s", targetName(target.host), err)
+		return 0, err
+	}
+
+	for _, data := range results {
+		ch <- prometheus.MustNewConstMetric(
+			lanInfo,
+			prometheus.GaugeValue,
+			1,
+			data.Name, data.Value,
+		)
+	}
+	return 1, nil
+}
+
 func collectBmcInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, error) {
+	output, err := ipmitoolOutput(target, "bmc")
+	if err != nil {
+		log.Debugf("Failed to collect ipmtool bmc data from %s: %s", targetName(target.host), err)
+		return 0, err
+	}
+	results, err := splitBmcOutput(output)
+	if err != nil {
+		log.Errorf("Failed to collect ipmtool bmc data from %s: %s", targetName(target.host), err)
+		return 0, err
+	}
+
+	for _, data := range results {
+		ch <- prometheus.MustNewConstMetric(
+			bmcInfo,
+			prometheus.GaugeValue,
+			1,
+			data.Name, data.Value,
+		)
+	}
+	return 1, nil
+}
+
+func collectFwumInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, error) {
 	output, _ := ipmitoolOutput(target, "fwum")
 	// Then fwum collector will work without exit code 1 -- uncomment this error check:
 	// if err != nil {
@@ -521,7 +773,7 @@ func collectBmcInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, error)
 		}
 	}
 	ch <- prometheus.MustNewConstMetric(
-		bmcInfo,
+		fwumInfo,
 		prometheus.GaugeValue,
 		1,
 		firmwareRevision, manufacturerID,
@@ -544,7 +796,7 @@ func collectPowerState(ch chan<- prometheus.Metric, target ipmiTarget) (int, err
 		chassisPowerStateDesc,
 		prometheus.GaugeValue,
 		float64(result),
-		"power_state",
+		"PowerState",
 	)
 	return 1, nil
 }
@@ -584,9 +836,13 @@ func (c collector) Collect(ch chan<- prometheus.Metric) {
 		case "sensor":
 			up, _ = collectSensorMonitoring(ch, target)
 		case "fru":
-			up, _ = collectFRUMonitoring(ch, target)
-		case "fwum":
+			up, _ = collectFRUInfo(ch, target)
+		case "lan":
+			up, _ = collectLANInfo(ch, target)
+		case "bmc":
 			up, _ = collectBmcInfo(ch, target)
+		case "fwum":
+			up, _ = collectFwumInfo(ch, target)
 		}
 		markCollectorUp(ch, collector, up)
 	}
