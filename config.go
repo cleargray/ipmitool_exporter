@@ -37,7 +37,7 @@ type IPMIConfig struct {
 	XXX map[string]interface{} `yaml:",inline"`
 }
 
-var emptyConfig = IPMIConfig{Collectors: []string{"sensor", "fwum", "fru"}}
+var emptyConfig = IPMIConfig{Collectors: []string{"sensor", "fwum", "fru", "dcmi-power"}}
 
 // CollectorName is used for unmarshaling the list of collectors in the yaml config file
 type CollectorName string
@@ -76,7 +76,7 @@ func (s *IPMIConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 	for _, c := range s.Collectors {
-		if !(c == "sensor" || c == "fwum" || c == "fru") {
+		if !(c == "sensor" || c == "fwum" || c == "fru" || c == "dcmi-power") {
 			return fmt.Errorf("unknown collector name: %s", c)
 		}
 	}

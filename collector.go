@@ -32,7 +32,13 @@ var (
 	firmwareRevRegex		= regexp.MustCompile(`^Firmware\sRevision\s*:\s*(?P<value>.*)`)
 	ipmiVersionRegex		= regexp.MustCompile(`^IPMI\sVersion\s*:\s*(?P<value>.*)`)
 	manufacturerRegex		= regexp.MustCompile(`^Manufacturer\sName\s*:\s*(?P<value>.*)`)
+	dcmiAvgPowerRegex		= regexp.MustCompile(`^\s*Average\spower\sreading\sover\ssample\speriod:\s*(?P<value>.*) Watts`)
+	dcmiInstaPowerRegex		= regexp.MustCompile(`^\s*Instantaneous\spower\sreading:\s*(?P<value>.*) Watts`)
+	dcmiMinPowerRegex		= regexp.MustCompile(`^\s*Minimum\sduring\ssampling\speriod:\s*(?P<value>.*) Watts`)
+	dcmiMaxPowerRegex		= regexp.MustCompile(`^\s*Maximum\sduring\ssampling\speriod:\s*(?P<value>.*) Watts`)
 )
+
+
 
 type fruData struct {
 	Name  string
@@ -49,6 +55,11 @@ type sensorData struct {
 	Value float64
 	Type  string
 	State string
+}
+
+type dcmiPowerData struct {
+	Name  string
+	Value float64
 }
 
 type fwumData struct {
@@ -192,10 +203,10 @@ var (
 		nil,
 	)
 
-	powerConsumption = prometheus.NewDesc(
+	powerConsumptionDesc = prometheus.NewDesc(
 		prometheus.BuildFQName(namespace, "dcmi", "power_consumption_watts"),
 		"Current power consumption in Watts.",
-		[]string{},
+		[]string{"name"},
 		nil,
 	)
 
@@ -275,6 +286,8 @@ func ipmitoolOutput(target ipmiTarget, command string) (string, error) {
 		cmdCommand = append(cmdCommand, "bmc", "info")
 	case "lan":
 		cmdCommand = append(cmdCommand, "lan", "print")
+	case "dcmi-power":
+		cmdCommand = append(cmdCommand, "dcmi", "power", "reading", "1_min")
 	default:
 		log.Errorf("Unknown ipmitool command: '%s'\n", command)
 		cmdCommand = append(cmdCommand, "")
@@ -338,6 +351,78 @@ func splitSensorOutput(impitoolOutput string) ([]sensorData, error) {
 			data.Type = splittedL[2]
 			data.State = splittedL[3]
 			result = append(result, data)
+		}
+	}
+	return result, err
+}
+
+func splitDcmiPowerOutput(impitoolOutput string) ([]dcmiPowerData, error) {
+	var result []dcmiPowerData
+
+	scanner := bufio.NewScanner(strings.NewReader(impitoolOutput))
+
+	var err error
+
+	for scanner.Scan() {
+		var data dcmiPowerData
+		line := scanner.Text()
+		if len(line) > 0 {
+			dcmiAvgPower := dcmiAvgPowerRegex.FindStringSubmatch(line)
+			if dcmiAvgPower != nil {
+				for i, name := range dcmiAvgPowerRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "Avg power consumption"
+					data.Value, err = strconv.ParseFloat(dcmiAvgPower[i], 64)
+					if err != nil {
+						continue
+					}
+					result = append(result, data)
+				}
+			}
+			dcmiMinPower := dcmiMinPowerRegex.FindStringSubmatch(line)
+			if dcmiMinPower != nil {
+				for i, name := range dcmiMinPowerRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "Min power consumption"
+					data.Value, err = strconv.ParseFloat(dcmiMinPower[i], 64)
+					if err != nil {
+						continue
+					}
+					result = append(result, data)
+				}
+			}
+			dcmiMaxPower := dcmiMaxPowerRegex.FindStringSubmatch(line)
+			if dcmiMaxPower != nil {
+				for i, name := range dcmiMaxPowerRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "Max power consumption"
+					data.Value, err = strconv.ParseFloat(dcmiMaxPower[i], 64)
+					if err != nil {
+						continue
+					}
+					result = append(result, data)
+				}
+			}
+			dcmiInstaPower := dcmiInstaPowerRegex.FindStringSubmatch(line)
+			if dcmiInstaPower != nil {
+				for i, name := range dcmiInstaPowerRegex.SubexpNames() {
+					if name != "value" {
+						continue
+					}
+					data.Name = "Instantaneous power consumption"
+					data.Value, err = strconv.ParseFloat(dcmiInstaPower[i], 64)
+					if err != nil {
+						continue
+					}
+					result = append(result, data)
+				}
+			}
 		}
 	}
 	return result, err
@@ -573,7 +658,7 @@ func (c collector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- sensorValueDesc
 	ch <- fanSpeedDesc
 	ch <- temperatureDesc
-	ch <- powerConsumption
+	ch <- powerConsumptionDesc
 	ch <- upDesc
 	ch <- durationDesc
 	ch <- chassisPowerDeviceDesc
@@ -751,6 +836,30 @@ func collectBmcInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, error)
 	return 1, nil
 }
 
+func collectDcmiPowerInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, error) {
+	output, err := ipmitoolOutput(target, "dcmi-power")
+	if err != nil {
+		log.Debugf("Failed to collect ipmtool dcmi power data from %s: %s", targetName(target.host), err)
+		return 0, err
+	}
+	results, err := splitDcmiPowerOutput(output)
+	if err != nil {
+		log.Errorf("Failed to collect ipmtool dcmi power data from %s: %s", targetName(target.host), err)
+		return 0, err
+	}
+
+	for _, data := range results {
+		ch <- prometheus.MustNewConstMetric(
+			powerConsumptionDesc,
+			prometheus.GaugeValue,
+			data.Value,
+			data.Name, 
+		)
+	}
+	return 1, nil
+}
+
+
 func collectFwumInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, error) {
 	output, _ := ipmitoolOutput(target, "fwum")
 	// Then fwum collector will work without exit code 1 -- uncomment this error check:
@@ -845,6 +954,8 @@ func (c collector) Collect(ch chan<- prometheus.Metric) {
 			up, _ = collectBmcInfo(ch, target)
 		case "fwum":
 			up, _ = collectFwumInfo(ch, target)
+		case "dcmi-power":
+			up, _ = collectDcmiPowerInfo(ch, target)
 		}
 		markCollectorUp(ch, collector, up)
 	}
