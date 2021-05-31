@@ -280,7 +280,9 @@ func ipmitoolOutput(target ipmiTarget, command string) (string, error) {
 		cmdCommand = append(cmdCommand, "")
 	}
 
-	cmdConfig = append(cmdConfig, "-H", target.host)
+	if target.host != "" {
+		cmdConfig = append(cmdConfig, "-H", target.host)
+	}
 	cmdConfig = append(cmdConfig, cmdCommand...)
 
 	cmd := exec.Command("ipmitool", cmdConfig...)
