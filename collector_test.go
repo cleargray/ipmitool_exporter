@@ -1,13 +1,13 @@
 package main
 
 import (
-	"testing"
-	"strings"
 	"math"
+	"strings"
+	"testing"
 )
 
 var (
-	collTestConfig string
+	collTestConfig   string
 	collSafeConfTest = &SafeConfig{
 		C: &Config{},
 	}
@@ -20,7 +20,7 @@ func TestIpmitoolConfig(t *testing.T) {
 	collModule := "example"
 	config := collSafeConfTest.ConfigForTarget(collTarget, collModule)
 	res := ipmitoolConfig(config)
-	resString := strings.Join(res," ")
+	resString := strings.Join(res, " ")
 	expect := "-L administrator -U example_user -P example_pass -N 5"
 	if resString != expect {
 		t.Errorf("Wrong config line '%s' generatet for module '%s'", resString, collModule)

@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 	"syscall"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/log"
@@ -21,24 +21,22 @@ const (
 )
 
 var (
-	fruBoardDateRegex		= regexp.MustCompile(`\sBoard\sMfg\sDate\s*:\s*(?P<value>.*)`)
-	ipmiCurrentPowerRegex	= regexp.MustCompile(`^Chassis\s*Power\s*is\s*(?P<value>on|off*)`)
-	ipSourceRegex			= regexp.MustCompile(`^IP\sAddress\sSource\s*:\s*(?P<value>.*)`)
-	macAddressRegex			= regexp.MustCompile(`^MAC\sAddress\s*:\s*(?P<value>.*)`)
-	defaultGatewayRegex		= regexp.MustCompile(`^Default\sGateway\sIP\s*:\s*(?P<value>.*)`)
-	vlanIDRegex				= regexp.MustCompile(`^802.1q\sVLAN\sID\s*:\s*(?P<value>.*)`)
-	vlanPriorityRegex		= regexp.MustCompile(`^802.1q\sVLAN\sPriority\s*:\s*(?P<value>.*)`)
-	subnetMaskRegex			= regexp.MustCompile(`^Subnet\sMask\s*:\s*(?P<value>.*)`)
-	firmwareRevRegex		= regexp.MustCompile(`^Firmware\sRevision\s*:\s*(?P<value>.*)`)
-	ipmiVersionRegex		= regexp.MustCompile(`^IPMI\sVersion\s*:\s*(?P<value>.*)`)
-	manufacturerRegex		= regexp.MustCompile(`^Manufacturer\sName\s*:\s*(?P<value>.*)`)
-	dcmiAvgPowerRegex		= regexp.MustCompile(`^\s*Average\spower\sreading\sover\ssample\speriod:\s*(?P<value>.*) Watts`)
-	dcmiInstaPowerRegex		= regexp.MustCompile(`^\s*Instantaneous\spower\sreading:\s*(?P<value>.*) Watts`)
-	dcmiMinPowerRegex		= regexp.MustCompile(`^\s*Minimum\sduring\ssampling\speriod:\s*(?P<value>.*) Watts`)
-	dcmiMaxPowerRegex		= regexp.MustCompile(`^\s*Maximum\sduring\ssampling\speriod:\s*(?P<value>.*) Watts`)
+	fruBoardDateRegex     = regexp.MustCompile(`\sBoard\sMfg\sDate\s*:\s*(?P<value>.*)`)
+	ipmiCurrentPowerRegex = regexp.MustCompile(`^Chassis\s*Power\s*is\s*(?P<value>on|off*)`)
+	ipSourceRegex         = regexp.MustCompile(`^IP\sAddress\sSource\s*:\s*(?P<value>.*)`)
+	macAddressRegex       = regexp.MustCompile(`^MAC\sAddress\s*:\s*(?P<value>.*)`)
+	defaultGatewayRegex   = regexp.MustCompile(`^Default\sGateway\sIP\s*:\s*(?P<value>.*)`)
+	vlanIDRegex           = regexp.MustCompile(`^802.1q\sVLAN\sID\s*:\s*(?P<value>.*)`)
+	vlanPriorityRegex     = regexp.MustCompile(`^802.1q\sVLAN\sPriority\s*:\s*(?P<value>.*)`)
+	subnetMaskRegex       = regexp.MustCompile(`^Subnet\sMask\s*:\s*(?P<value>.*)`)
+	firmwareRevRegex      = regexp.MustCompile(`^Firmware\sRevision\s*:\s*(?P<value>.*)`)
+	ipmiVersionRegex      = regexp.MustCompile(`^IPMI\sVersion\s*:\s*(?P<value>.*)`)
+	manufacturerRegex     = regexp.MustCompile(`^Manufacturer\sName\s*:\s*(?P<value>.*)`)
+	dcmiAvgPowerRegex     = regexp.MustCompile(`^\s*Average\spower\sreading\sover\ssample\speriod:\s*(?P<value>.*) Watts`)
+	dcmiInstaPowerRegex   = regexp.MustCompile(`^\s*Instantaneous\spower\sreading:\s*(?P<value>.*) Watts`)
+	dcmiMinPowerRegex     = regexp.MustCompile(`^\s*Minimum\sduring\ssampling\speriod:\s*(?P<value>.*) Watts`)
+	dcmiMaxPowerRegex     = regexp.MustCompile(`^\s*Maximum\sduring\ssampling\speriod:\s*(?P<value>.*) Watts`)
 )
-
-
 
 type fruData struct {
 	Name  string
@@ -311,7 +309,7 @@ func ipmitoolOutput(target ipmiTarget, command string) (string, error) {
 			// with it right now
 			if exiterr, ok := err.(*exec.ExitError); ok {
 				if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-				log.Debugf("Exit status of FWUM %d, but it was suppressed", status.ExitStatus())
+					log.Debugf("Exit status of FWUM %d, but it was suppressed", status.ExitStatus())
 				}
 			}
 		} else {
@@ -338,7 +336,7 @@ func splitSensorOutput(impitoolOutput string) ([]sensorData, error) {
 			data.Name = splittedL[0]
 			valueS := splittedL[1]
 			convValueS, convErr := strconv.ParseUint(valueS, 0, 64)
-			if valueS != "na" && convErr != nil {	
+			if valueS != "na" && convErr != nil {
 				data.Value, err = strconv.ParseFloat(valueS, 64)
 				if err != nil {
 					continue
@@ -853,12 +851,11 @@ func collectDcmiPowerInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, 
 			powerConsumptionDesc,
 			prometheus.GaugeValue,
 			data.Value,
-			data.Name, 
+			data.Name,
 		)
 	}
 	return 1, nil
 }
-
 
 func collectFwumInfo(ch chan<- prometheus.Metric, target ipmiTarget) (int, error) {
 	output, _ := ipmitoolOutput(target, "fwum")
