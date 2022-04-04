@@ -97,7 +97,7 @@ Product Serial        : E16953528901097`
 }
 
 func TestGetChassisPowerState(t *testing.T) {
-	collChassisOutput := `Chassis Power is on`
+	collChassisOutput := `Chassis Power is off`
 	res, err := getChassisPowerState(collChassisOutput)
 	expect := 0
 	if err != nil {
