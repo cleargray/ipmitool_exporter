@@ -287,6 +287,10 @@ func ipmitoolOutput(target ipmiTarget, command string) (string, error) {
 		cmdCommand = append(cmdCommand, "bmc", "info")
 	case "lan":
 		cmdCommand = append(cmdCommand, "lan", "print")
+	case "elist":
+		cmdCommand = append(cmdCommand, "sdr", "elist", "full")
+	case "chassis":
+		cmdCommand = append(cmdCommand, "chassis", "status")
 	case "dcmi-power":
 		cmdCommand = append(cmdCommand, "dcmi", "power", "reading", "1_min")
 	default:
