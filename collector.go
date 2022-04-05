@@ -253,6 +253,9 @@ var (
 
 func ipmitoolConfig(config IPMIConfig) []string {
 	var args []string
+	if config.Interface != "" {
+		args = append(args, "-I", config.Interface)
+	}
 	if config.Privilege != "" {
 		args = append(args, "-L", config.Privilege)
 	}

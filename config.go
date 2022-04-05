@@ -30,6 +30,7 @@ type IPMIConfig struct {
 	User       string   `yaml:"user"`
 	Password   string   `yaml:"pass"`
 	Privilege  string   `yaml:"privilege"`
+	Interface  string   `yaml:"interface"`
 	Timeout    int64    `yaml:"timeout"`
 	Collectors []string `yaml:"collectors"`
 
