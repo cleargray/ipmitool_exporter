@@ -5,13 +5,14 @@ import (
 )
 
 var (
-	testConfig string
-	testBadConfig string
+	testConfig     string
+	testBadConfig  string
 	testGoodConfig string
-	safeConfTest = &SafeConfig{
+	safeConfTest   = &SafeConfig{
 		C: &Config{},
 	}
 )
+
 func TestGoodReloadConfig(t *testing.T) {
 	testGoodConfig := "./ipmi_remote.yml"
 	res := safeConfTest.ReloadConfig(testGoodConfig)
@@ -52,7 +53,7 @@ func TestConfigForTarget(t *testing.T) {
 	if res.User != "example_user" && res.Password != "example_pass" {
 		t.Errorf("Wrong module '%s' loaded for target '%s'", module, target)
 	}
-	
+
 	target = "localhost"
 	module = "example1"
 	res = safeConfTest.ConfigForTarget(target, module)

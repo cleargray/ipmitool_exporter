@@ -1,13 +1,13 @@
 package main
 
 import (
-	"testing"
-	"strings"
 	"math"
+	"strings"
+	"testing"
 )
 
 var (
-	collTestConfig string
+	collTestConfig   string
 	collSafeConfTest = &SafeConfig{
 		C: &Config{},
 	}
@@ -20,7 +20,7 @@ func TestIpmitoolConfig(t *testing.T) {
 	collModule := "example"
 	config := collSafeConfTest.ConfigForTarget(collTarget, collModule)
 	res := ipmitoolConfig(config)
-	resString := strings.Join(res," ")
+	resString := strings.Join(res, " ")
 	expect := "-L administrator -U example_user -P example_pass -N 5"
 	if resString != expect {
 		t.Errorf("Wrong config line '%s' generatet for module '%s'", resString, collModule)
@@ -97,7 +97,7 @@ Product Serial        : E16953528901097`
 }
 
 func TestGetChassisPowerState(t *testing.T) {
-	collChassisOutput := `Chassis Power is on`
+	collChassisOutput := `Chassis Power is off`
 	res, err := getChassisPowerState(collChassisOutput)
 	expect := 0
 	if err != nil {

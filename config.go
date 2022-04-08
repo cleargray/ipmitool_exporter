@@ -27,17 +27,18 @@ type SafeConfig struct {
 // IPMIConfig is the Go representation of a module configuration in the yaml
 // config file.
 type IPMIConfig struct {
-	User             string   `yaml:"user"`
-	Password         string   `yaml:"pass"`
-	Privilege        string   `yaml:"privilege"`
-	Timeout          int64   `yaml:"timeout"`
-	Collectors       []string `yaml:"collectors"`
+	User       string   `yaml:"user"`
+	Password   string   `yaml:"pass"`
+	Privilege  string   `yaml:"privilege"`
+	Interface  string   `yaml:"interface"`
+	Timeout    int64    `yaml:"timeout"`
+	Collectors []string `yaml:"collectors"`
 
 	// Catches all undefined fields and must be empty after parsing.
 	XXX map[string]interface{} `yaml:",inline"`
 }
 
-var emptyConfig = IPMIConfig{Collectors: []string{"sensor", "fwum", "fru"}}
+var emptyConfig = IPMIConfig{Collectors: []string{"sensor", "fwum", "fru", "dcmi-power"}}
 
 // CollectorName is used for unmarshaling the list of collectors in the yaml config file
 type CollectorName string
@@ -76,7 +77,7 @@ func (s *IPMIConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 	for _, c := range s.Collectors {
-		if !(c == "sensor" || c == "fwum" || c == "fru") {
+		if !(c == "sensor" || c == "fwum" || c == "fru" || c == "dcmi-power") {
 			return fmt.Errorf("unknown collector name: %s", c)
 		}
 	}
